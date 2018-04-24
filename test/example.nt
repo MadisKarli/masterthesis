@@ -1,0 +1,9 @@
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Product> .
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://schema.org/Product/offers> _:node96319538c759d7a6d0549da6f8f2f .
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://schema.org/Product/priceCurrency> "EUR" .
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://schema.org/Product/price> "45.00" .
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://schema.org/Product/name> "Toote nimi" .
+_:node6b31373f15f4f8dcfe7f527ca784fb <http://schema.org/Product/aggregateRating> _:nodef7a16aae5c14b0f033f8b4ee56357fdc .
+<http://www.url.ee/toode/tooteleht> <http://www.w3.org/1999/xhtml/microdata#item> _:node6b31373f15f4f8dcfe7f527ca784fb .
+<<http://www.url.ee/toode/tooteleht> <http://graph.ir.ee/media/usedBy> <https://graph.ir.ee/organizations/ee-11111111> .
+<http://www.shouldntsee.this> <http://graph.ir.ee/media/usedBy> <https://graph.ir.ee/organizations/ee-9999999> .
