@@ -58,12 +58,12 @@ configuration.set("spark.executor.cores", "3")
 
 sc = pyspark.SparkContext(conf=configuration)
 
-reader = sc.textFile("/home/madis/IR/data/microdata_from_warcs/microdata2017_miledapril2018")
+reader = sc.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
 
 # distinct 16:45:01 - 16:46:16
 # no distinct 16:48:46 - 16:50:49
 with_companies = reader.filter(contains_company_url).distinct().map(insert_company_triples)
-with_companies.coalesce(1).saveAsTextFile("tmp/companies-usedby08")
+with_companies.coalesce(1).saveAsTextFile("tmp/skumatch-companies2")
 
 
 # join companies and triples

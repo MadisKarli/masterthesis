@@ -1,5 +1,5 @@
 from __future__ import print_function
-from pyspark import SparkContext
+from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
 from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
 
@@ -43,6 +43,7 @@ def filterProducts(col):
 
 
 def split_into_triples(row):
+	csv.field_size_limit(100000000)
 	row = row.encode('utf-8')
 	res = [x for x in csv.reader([row], delimiter=' ')][0]
 	if len(res) == 4:
@@ -50,49 +51,158 @@ def split_into_triples(row):
 			return res
 
 
+def remove_language_strings(row):
+	object = row[2]
+
+	parts = object.split("@")
+
+	language_tag = parts[-1]
+
+	# case 1: @et or @fi at the end
+	if len(language_tag) == 2:
+		object = "@".join(parts[:-1])
+	# case 2: @et-ee at the end
+	elif len(language_tag) == 5:
+		if language_tag[2] == "-":
+			object = "@".join(parts[:-1])
+
+	return [row[0], row[1], object]
+
+
+# todo actually we could steal the sku from here
+def remove_empty_skus(row):
+	predicate = row[1]
+	object = row[2]
+
+	if predicate != "<http://schema.org/Product/sku>":
+		return True
+
+	if object == "Null":
+		return False
+
+	if object == "N/A":
+		return False
+
+	return True
+
+
+# todo think of a better way?
+def add_sku_relationship_old(row):
+	subject = row[0]
+	predicate = row[1]
+	object = row[2]
+
+	print(subject, predicate, object)
+
+	return [subject, predicate, object]
+
+
+def add_sku_relationship(row):
+	subject = row[0]
+	predicate = row[1]
+	object = row[2]
+
+
+	if predicate == "<http://schema.org/Product/sku>":
+		# if we have multiple SKUs then use only last one
+		parts = object.split(" / ")
+		if len(parts) > 1:
+			object = parts[-1]
+		return [subject, "<http://schema.org/Product/sameAs>", "sku:" + object]
+
+
 if __name__ == "__main__":
 	# this works from command line
 	# spark-submit  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10 bipartite-graphs.py
 	# os.environ['PYSPARK_SUBMIT_ARGS'] = '  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10  pyspark-shell '
 
-	spark = SparkContext(appName="PythonDataFrame")
+	SparkContext.setSystemProperty('spark.executor.memory', '2g')
+	sparkconf = SparkConf()
+	sparkconf.setAppName("Build bipartite graphs")
+
+	spark = SparkContext(conf=sparkconf)
 
 	spark.setLogLevel('ERROR')
 
 	sqlContext = SQLContext(spark)
 
-	# filterEdges_udf = udf(filterEdges, BooleanType())
-	# filterCompanies_udf = udf(filterCompanies, BooleanType())
-	# filterProducts_udf = udf(filterProducts, BooleanType())
-
-
-	lines = spark.textFile("/home/madis/IR/jupyter notebooks/merged-tpiletee")
+	# todo refactor names
+	#lines = spark.textFile("/home/madis/IR/jupyter notebooks/merged-tpiletee")
+	# triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
+	triples = spark.textFile("hdfs://ir-hadoop2/user/madis/microdata/2017/triples-microdata")
+	# companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch-companies")
+	companies = spark.textFile("hdfs://ir-hadoop2/user/madis/thesis/company-triples")
 	#lines = spark.textFile("test/example.nt")
-	parts = lines.map(split_into_triples).filter(lambda a: a is not None)
 
+	# split the parts into triples (not perfect)
+	parts = triples.map(split_into_triples).filter(lambda a: a is not None)
+	parts_comp = companies.map(split_into_triples).filter(lambda a: a is not None)
+
+
+	# PRODUCT MATHING IS DONE HERE
+
+	# remove @et and @et-ee language strings
+	parts = parts.map(remove_language_strings)
+	# remove SKUs that are null or na
+	parts = parts.filter(remove_empty_skus)
+
+	# todo find actual duplicates
+	# replace node_ids with sku's
+	connections = parts.map(add_sku_relationship).filter(lambda a: a is not None)
+
+
+	# END SUPER IMPORTANT PRODUCT MATCHING
+
+	# add companies and products
+	parts = parts.union(parts_comp)
+	parts = parts.union(connections)
+
+	# todo add companies aswell
 	values_rdd = parts.map(lambda p: Row(id=p[0], predicate=p[1], object=p[2]))
 	values = sqlContext.createDataFrame(values_rdd)
+	values.cache()
 
-	values.registerTempTable("triples")
+	# todo refactor column names
+	companies = values\
+		.filter(values.predicate == '<http://graph.ir.ee/media/usedBy>')\
+		.select(F.col("id").alias("company_id"), F.col("object").alias("company_nr"))
 
-	# todo convert to dataframe operations
-	companies = sqlContext.sql("SELECT id as company_id, object as company_nr FROM triples t WHERE predicate = '<http://graph.ir.ee/media/usedBy>' ")
-	items = sqlContext.sql("SELECT id as item_id, object as item_ref FROM triples t WHERE predicate = '<http://www.w3.org/1999/xhtml/microdata#item>'")
-	products = sqlContext.sql("SELECT id as product FROM triples t WHERE object = '<http://schema.org/Product>'")
+	items = values\
+		.filter(values.predicate == '<http://www.w3.org/1999/xhtml/microdata#item>')\
+		.select(F.col("id").alias("item_id"), F.col("object").alias("item_ref"))
 
-	# todo now that we have triples we can find duplicate products
-	# find all products
-	# values.filter(F.col("predicate").rlike("<http://schema.org/Product/")).show(10, False)
-	# find all products with SKU
+	products = values\
+		.filter(values.object == '<http://schema.org/Product>')\
+		.select(F.col("id").alias("product"))
+
+	# todo what happens if we already have a same as connection?
+	connections = values\
+		.filter(values.predicate == '<http://schema.org/Product/sameAs>')\
+		.select(F.col("id").alias("item_id"), F.col("object").alias("connection_ref"))
+
+	# connect products and sameAs references
+	product_connections = products\
+		.join(connections, products.product == connections.item_id, 'left')\
+		.select("product", "connection_ref")
 
 	company_items = companies.join(items, companies.company_id == items.item_id, 'left').distinct()
 	company_items = company_items.filter(company_items.item_ref != "null")
 
-	company_products = company_items.join(products, company_items.item_ref == products.product, 'left')
+	company_products = company_items.join(product_connections, company_items.item_ref == products.product, 'left')
 	company_products = company_products.filter(company_products.product != "null")
 
-	bipartite = company_products.select("company_nr", "product")
+	bipartite = company_products.select("company_nr", "product", "connection_ref")
 
-	rdd = bipartite.write.parquet("bipartite")
+	bipartite.write.parquet("bipartite-all-with-sku")
+
+	# write connections do a separate file
+	#company_products.filter(company_products.connection_ref != "null").select("company_nr", "product", "connection_ref")#.write.parquet("bipartite-sku-all")
+
+	# todo can this be done using dataframe operations?
+	company_products.registerTempTable("company_products")
+	sqlContext.sql(
+		"select company_nr, IF(connection_ref != \"null\", connection_ref, product) as product from company_products")\
+		.write.parquet("parquets/bipartite-sku-connected").write.parquet("bipartite-all-filtered")
 
 	spark.stop()
+
