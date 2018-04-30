@@ -1,16 +1,10 @@
 from __future__ import print_function
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
-from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
+from pyspark.sql.types import Row
 
-import os
 from pyspark.sql import functions as F
-#import graphframes
-from pyspark.sql.types import BooleanType
 
-from pyspark.sql.functions import udf
-import sys
-import re
 import csv
 
 
@@ -102,7 +96,6 @@ def add_sku_relationship(row):
 	predicate = row[1]
 	object = row[2]
 
-
 	if predicate == "<http://schema.org/Product/sku>":
 		# if we have multiple SKUs then use only last one
 		parts = object.split(" / ")
@@ -116,22 +109,23 @@ if __name__ == "__main__":
 	# spark-submit  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10 bipartite-graphs.py
 	# os.environ['PYSPARK_SUBMIT_ARGS'] = '  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10  pyspark-shell '
 
-	SparkContext.setSystemProperty('spark.executor.memory', '2g')
 	sparkconf = SparkConf()
 	sparkconf.setAppName("Build bipartite graphs")
 
 	spark = SparkContext(conf=sparkconf)
 
-	spark.setLogLevel('ERROR')
+	#spark.setLogLevel('ERROR')
 
 	sqlContext = SQLContext(spark)
 
 	# todo refactor names
 	#lines = spark.textFile("/home/madis/IR/jupyter notebooks/merged-tpiletee")
-	# triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
-	triples = spark.textFile("hdfs://ir-hadoop2/user/madis/microdata/2017/triples-microdata")
-	# companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch-companies")
-	companies = spark.textFile("hdfs://ir-hadoop2/user/madis/thesis/company-triples")
+	triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
+	# triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/microdata2017_miledapril2018")
+	# triples = spark.textFile("hdfs://ir-hadoop1/user/madis/microdata/2017/triples-microdata")
+	#companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch-companies")
+	# companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/company-triples_mined-april-2018")
+	companies = spark.textFile("hdfs://ir-hadoop1/user/madis/thesis/company-triples")
 	#lines = spark.textFile("test/example.nt")
 
 	# split the parts into triples (not perfect)
@@ -157,12 +151,12 @@ if __name__ == "__main__":
 	parts = parts.union(parts_comp)
 	parts = parts.union(connections)
 
-	# todo add companies aswell
 	values_rdd = parts.map(lambda p: Row(id=p[0], predicate=p[1], object=p[2]))
 	values = sqlContext.createDataFrame(values_rdd)
 	values.cache()
 
 	# todo refactor column names
+	# todo performance of these joins could be improved for sure
 	companies = values\
 		.filter(values.predicate == '<http://graph.ir.ee/media/usedBy>')\
 		.select(F.col("id").alias("company_id"), F.col("object").alias("company_nr"))
@@ -191,18 +185,17 @@ if __name__ == "__main__":
 	company_products = company_items.join(product_connections, company_items.item_ref == products.product, 'left')
 	company_products = company_products.filter(company_products.product != "null")
 
-	bipartite = company_products.select("company_nr", "product", "connection_ref")
-
-	bipartite.write.parquet("bipartite-all-with-sku")
-
-	# write connections do a separate file
-	#company_products.filter(company_products.connection_ref != "null").select("company_nr", "product", "connection_ref")#.write.parquet("bipartite-sku-all")
+	# write all connections do a separate file
+	company_products\
+		.filter(company_products.connection_ref != "null")\
+		.select("company_nr", F.col("connection_ref").alias("product"))\
+		.write.parquet("bipartite-all-sku-only")
 
 	# todo can this be done using dataframe operations?
-	company_products.registerTempTable("company_products")
+	# write only matched products
+	company_products.registerTempTable("company_products_table")
 	sqlContext.sql(
-		"select company_nr, IF(connection_ref != \"null\", connection_ref, product) as product from company_products")\
-		.write.parquet("parquets/bipartite-sku-connected").write.parquet("bipartite-all-filtered")
+		"select company_nr, IF(connection_ref != \"null\", connection_ref, product) as product from company_products_table")\
+		.write.parquet("bipartite-all")
 
 	spark.stop()
-

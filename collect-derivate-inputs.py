@@ -1,43 +1,45 @@
 import os
 import pandas as pd
 import numpy as np
-import csv
 
-dir = "metrics"
+directory_name = "metrics"
 # todo what if we have a company that is not represented at all?
-arr = os.listdir(dir)
+arr = os.listdir(directory_name)
 arr.sort()
 
-dir_df = pd.read_csv(dir + "/" + arr[0], index_col="ID")
+# read the first file and add 00 to its column names so that we have degree00, pagerank00, ...
+dir_df = pd.read_csv(directory_name + "/" + arr[0], index_col="ID")
 dir_df.columns = [x + "00" for x in dir_df.columns]
 
+# read csv files and add 01, 02,... to column names based on the index of file
 for idx, f in enumerate(arr[1:]):
-	df = pd.read_csv(dir + "/" + f, index_col="ID")
+	df = pd.read_csv(directory_name + "/" + f, index_col="ID")
 	# adds the 01, 00, etc to column names
 	df.columns = [x + str('{:02d}'.format(idx + 1)) for x in df.columns]
 	dir_df = pd.concat([dir_df, df], axis=1)
-	# renames the columns but not all
-	# dir_df = pd.merge(dir_df, df, left_index=True, right_index=True, how='outer')
 
+# generate values if we don't have 49 columns
+# todo what should we do when new metric is added halfway through, create 0s before the time?
 
-print dir_df
+time_series_variables = ['degree', 'pagerank']
+# calculate how many extra variables we need to generate
+variable_count = dir_df.shape[1] / len(time_series_variables)
+needed = 49 - variable_count
 
-# todo change if new metrics are added
-# generate values if we dont have 49 columns
-# divided by two as we have degree and pagerank
-degree_count = dir_df.shape[1] / 2
-needed = 49 - degree_count
+# generate an output file for each column name as derivatives does not support multiple time series
+row_names = dir_df.index
 
-colnames1 = ['degree' + str('{:02d}'.format(degree_count + 1 + x)) for x in range(needed)]
-colnames2 = ['pagerank' + str('{:02d}'.format(degree_count + 1 + x)) for x in range(needed)]
-colnames = colnames1 + colnames2
+# if we want to generate additional data
+generate_data_bool = True
 
-rownames = dir_df.index
-generated_data = np.random.rand(len(rownames), len(colnames))
-
-generated_df = pd.DataFrame(columns=colnames, index=rownames, data=generated_data)
-generated_data = pd.concat([generated_df, dir_df], axis=1)
-
-generated_data = generated_data.reindex(sorted(generated_data.columns), axis=1)
-
-generated_data.to_csv("asi.csv", na_rep=0)
+for ts in time_series_variables:
+	ts_only = dir_df.filter(like=ts)
+	if generate_data_bool:
+		colnames = [ts + str('{:02d}'.format(variable_count + 1 + x)) for x in range(needed)]
+		generated_values = np.random.rand(len(row_names), len(colnames))
+		generated_df = pd.DataFrame(columns=colnames, index=row_names, data=generated_values)
+		combined_df = pd.concat([ts_only, generated_df], axis=1)
+		combined_df.to_csv(ts + ".csv", na_rep=0)
+		print combined_df
+	else:
+		combined_df.to_csv(ts + ".csv", na_rep=0)
