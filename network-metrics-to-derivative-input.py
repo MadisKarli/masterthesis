@@ -1,8 +1,10 @@
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
 from pyspark.sql import functions as F
+
 import csv
 import datetime
+import sys
 
 
 # expected output
@@ -27,12 +29,22 @@ def row_to_str(row):
 
 
 if __name__ == "__main__":
+	if len(sys.argv) < 3:
+		print("Usage:")
+		print("network-metrics-to-derivative-input.py location_of_bipartite_data output_location(existing folder)")
+		print("\nExample")
+		print("python network-metrics-to-derivative-input.py network-metrics metrics")
+		sys.exit(1)
+	else:
+		bipartite_location = sys.argv[1]
+		output_location = sys.argv[2]
+
 	sc = SparkContext()
-	# spark.setLogLevel("ERROR")
+	sc.setLogLevel("ERROR")
 
 	sqlContext = SQLContext(sc)
 
-	values = sqlContext.read.load("network-metrics", format="parquet")
+	values = sqlContext.read.load(bipartite_location, format="parquet")
 
 	row_names = values.schema.names
 	row_names[0] = "ID"
@@ -43,9 +55,9 @@ if __name__ == "__main__":
 
 	# get date
 	now = datetime.datetime.now()
-	print str(now.strftime("%Y%m%d"))
+	print "Current date" + str(now.strftime("%Y%m%d"))
 
-	with open('metrics/' + str(now.strftime("%Y%m%d")) +'.csv', 'w') as csvfile:
+	with open(output_location + '/' + str(now.strftime("%Y%m%d")) + '.csv', 'w') as csvfile:
 		csvwriter = csv.writer(csvfile, quoting=csv.QUOTE_NONNUMERIC)
 		csvwriter.writerow(row_names)
 		csvwriter.writerows(output_contents)

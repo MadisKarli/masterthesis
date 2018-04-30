@@ -6,6 +6,7 @@ from pyspark.sql.types import Row
 from pyspark.sql import functions as F
 
 import csv
+import sys
 
 
 def filterEdges(col):
@@ -80,17 +81,6 @@ def remove_empty_skus(row):
 	return True
 
 
-# todo think of a better way?
-def add_sku_relationship_old(row):
-	subject = row[0]
-	predicate = row[1]
-	object = row[2]
-
-	print(subject, predicate, object)
-
-	return [subject, predicate, object]
-
-
 def add_sku_relationship(row):
 	subject = row[0]
 	predicate = row[1]
@@ -105,9 +95,22 @@ def add_sku_relationship(row):
 
 
 if __name__ == "__main__":
-	# this works from command line
-	# spark-submit  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10 bipartite-graphs.py
-	# os.environ['PYSPARK_SUBMIT_ARGS'] = '  --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10  pyspark-shell '
+	if len(sys.argv) < 5:
+		print("Usage:")
+		print("bipartite-graphs.py location_of_microdata_triples location_of_company_triples "
+			  "output_all_location output_only_matches_location")
+		print("\n Example")
+		print("python bipartite-graphs.py "
+			  "/home/madis/IR/data/microdata_from_warcs/skumatch "
+			  "/home/madis/IR/data/microdata_from_warcs/skumatch-companies "
+			  "bipartite-all "
+			  "bipartite-all-sku-only")
+		sys.exit(1)
+	else:
+		microdata_triples_location = sys.argv[1]
+		company_triples_location = sys.argv[2]
+		output_all_location = sys.argv[3]
+		output_filtered_location = sys.argv[4]
 
 	sparkconf = SparkConf()
 	sparkconf.setAppName("Build bipartite graphs")
@@ -118,21 +121,15 @@ if __name__ == "__main__":
 
 	sqlContext = SQLContext(spark)
 
-	# todo refactor names
-	#lines = spark.textFile("/home/madis/IR/jupyter notebooks/merged-tpiletee")
-	triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
-	# triples = spark.textFile("/home/madis/IR/data/microdata_from_warcs/microdata2017_miledapril2018")
-	# triples = spark.textFile("hdfs://ir-hadoop1/user/madis/microdata/2017/triples-microdata")
-	#companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch-companies")
-	# companies = spark.textFile("/home/madis/IR/data/microdata_from_warcs/company-triples_mined-april-2018")
-	companies = spark.textFile("hdfs://ir-hadoop1/user/madis/thesis/company-triples")
-	#lines = spark.textFile("test/example.nt")
+	triples = spark.textFile(microdata_triples_location)
+
+	companies = spark.textFile(company_triples_location)
 
 	# split the parts into triples (not perfect)
 	parts = triples.map(split_into_triples).filter(lambda a: a is not None)
 	parts_comp = companies.map(split_into_triples).filter(lambda a: a is not None)
 
-
+	###############################
 	# PRODUCT MATHING IS DONE HERE
 
 	# remove @et and @et-ee language strings
@@ -140,12 +137,12 @@ if __name__ == "__main__":
 	# remove SKUs that are null or na
 	parts = parts.filter(remove_empty_skus)
 
-	# todo find actual duplicates
+	# find actual duplicates
 	# replace node_ids with sku's
 	connections = parts.map(add_sku_relationship).filter(lambda a: a is not None)
 
-
-	# END SUPER IMPORTANT PRODUCT MATCHING
+	# END PRODUCT MATCHING
+	###############################
 
 	# add companies and products
 	parts = parts.union(parts_comp)
@@ -189,13 +186,13 @@ if __name__ == "__main__":
 	company_products\
 		.filter(company_products.connection_ref != "null")\
 		.select("company_nr", F.col("connection_ref").alias("product"))\
-		.write.parquet("bipartite-all-sku-only")
+		.write.parquet(output_filtered_location)
 
 	# todo can this be done using dataframe operations?
 	# write only matched products
 	company_products.registerTempTable("company_products_table")
 	sqlContext.sql(
 		"select company_nr, IF(connection_ref != \"null\", connection_ref, product) as product from company_products_table")\
-		.write.parquet("bipartite-all")
+		.write.parquet(output_all_location)
 
 	spark.stop()

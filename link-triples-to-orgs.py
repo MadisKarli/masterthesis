@@ -1,10 +1,12 @@
 import pyspark
+import sys
 
 
 def populate_companies(file_loc):
 	db = {}
 	with open(file_loc, 'r') as f:
-		header = f.readline()
+		# skip the header
+		f.readline()
 		contents = f.read().split("\n")
 		for row in contents:
 			parts = row.split(";")
@@ -51,23 +53,32 @@ def insert_company_triples(row, wantShort=True):
 			return create_estonian_company_triples(mined_from_url, company_id)
 
 
-company_database = populate_companies('/home/madis/IR/data/company-urls/company-urls.csv')
+if __name__ == "__main__":
+	if len(sys.argv) < 4:
+		print("Usage:")
+		print("link-triples-to-orgs.py company_codes_csv_location input_triples_loc output_loc")
+		print("\nExample:")
+		print("python link-triples-to-orgs.py "
+			  "/home/madis/IR/data/company-urls/company-urls.csv "
+			  "/home/madis/IR/data/microdata_from_warcs/skumatch "
+			  "/tmp/triples-to-companies")
+		sys.exit(1)
+	else:
+		company_csv_list_loc = sys.argv[1]
+		input_loc = sys.argv[2]
+		output_loc = sys.argv[3]
 
-configuration = pyspark.SparkConf()
-configuration.set("spark.executor.cores", "3")
+	company_database = populate_companies(company_csv_list_loc)
 
-sc = pyspark.SparkContext(conf=configuration)
+	sc = pyspark.SparkContext()
 
-reader = sc.textFile("/home/madis/IR/data/microdata_from_warcs/skumatch")
+	reader = sc.textFile(input_loc)
 
-# distinct 16:45:01 - 16:46:16
-# no distinct 16:48:46 - 16:50:49
-with_companies = reader.filter(contains_company_url).distinct().map(insert_company_triples)
-with_companies.coalesce(1).saveAsTextFile("tmp/skumatch-companies2")
+	with_companies = reader.filter(contains_company_url).distinct().map(insert_company_triples)
+	with_companies.coalesce(1).saveAsTextFile(output_loc)
 
+	# join companies and triples
+	# combined = reader.union(with_companies)
+	# combined.saveAsTextFile("tmp/merged-tpiletee01")
 
-# join companies and triples
-#combined = reader.union(with_companies)
-#combined.saveAsTextFile("tmp/merged-tpiletee01")
-
-sc.stop()
+	sc.stop()

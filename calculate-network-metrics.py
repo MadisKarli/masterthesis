@@ -3,15 +3,31 @@ from pyspark import SparkContext
 from pyspark.sql import SQLContext
 from pyspark.sql import functions as F
 
+import sys
+
 import graphframes
 
 if __name__ == "__main__":
+	if len(sys.argv) < 3:
+		print("\nUsage:")
+		print("--packages graphframes:graphframes:0.5.0-spark1.6-s_2.10 "
+			  "calculate-network-metrics.py location_of_bipartite_dataframe output_location ")
+		print("\n Example")
+		print("spark-submit --packages graphframes:graphframes:0.5.0-spark1.6-s_2.10 "
+			  "calculate-network-metrics.py "
+			  "/home/madis/IR/thesis/parquets/bipartite-sku-only-sku-matches"
+			  "network-metrics")
+		sys.exit(1)
+	else:
+		bipartite_location = sys.argv[1]
+		output_location = sys.argv[2]
+
 	spark = SparkContext()
 	spark.setLogLevel("ERROR")
 
 	sql_context = SQLContext(spark)
 
-	values = sql_context.read.load("/home/madis/IR/thesis/parquets/bipartite-sku-only-sku-matches", format="parquet")
+	values = sql_context.read.load(bipartite_location, format="parquet")
 	# values = sql_context.read.load("hdfs://ir-hadoop1/user/madis/bipartite-all-sku-only", format="parquet")
 
 	company_nodes = values.select(F.col("company_nr").alias("id")).distinct()
@@ -64,7 +80,7 @@ if __name__ == "__main__":
 	vertices_out.show(50, False)
 
 	# output the data
-	vertices_out.write.parquet("network-metrics")
+	vertices_out.write.parquet(output_location)
 
 	g.edges.show(50, False)
 	g.vertices.show(50, False)
