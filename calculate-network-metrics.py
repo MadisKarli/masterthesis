@@ -51,7 +51,7 @@ if __name__ == "__main__":
 		.distinct()
 
 	# as we need pagerank for companies then we create another df so that it would be directed
-	edges_from_product = values.withColumn("relationship", F.lit("belongsTo"))
+	edges_from_product = values.withColumn("relationship", F.lit("offers"))
 	edges_from_product = edges_from_product\
 		.select(F.col("product").alias("dst"), F.col("company_nr").alias("src"), "relationship")\
 		.distinct()

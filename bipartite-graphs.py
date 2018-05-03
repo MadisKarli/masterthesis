@@ -55,11 +55,11 @@ def remove_language_strings(row):
 
 	# case 1: @et or @fi at the end
 	if len(language_tag) == 2:
-		object = "@".join(parts[:-1])
+		object = "@".join(parts[:-1]).strip('"')
 	# case 2: @et-ee at the end
 	elif len(language_tag) == 5:
 		if language_tag[2] == "-":
-			object = "@".join(parts[:-1])
+			object = "@".join(parts[:-1]).strip('"')
 
 	return [row[0], row[1], object]
 
