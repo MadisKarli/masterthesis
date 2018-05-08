@@ -6,6 +6,8 @@ from pyspark.sql import functions as F
 import sys
 
 import graphframes
+#https://github.com/graphframes/graphframes/issues/256
+from lib.aggregate_messages import AggregateMessages as AM
 
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
@@ -28,13 +30,12 @@ if __name__ == "__main__":
 	sql_context = SQLContext(spark)
 
 	values = sql_context.read.load(bipartite_location, format="parquet")
-	# values = sql_context.read.load("hdfs://ir-hadoop1/user/madis/bipartite-all-sku-only", format="parquet")
 
 	company_nodes = values.select(F.col("company_nr").alias("id")).distinct()
 	product_nodes = values.select(F.col("product").alias("id")).distinct()
 
-	print("Companies " + str(company_nodes.count()))
-	print("Products " + str(product_nodes.count()))
+	# print("Companies " + str(company_nodes.count()))
+	# print("Products " + str(product_nodes.count()))
 
 	# print(company_nodes.collect())
 	# print(product_nodes.collect())
@@ -60,14 +61,32 @@ if __name__ == "__main__":
 
 	g = graphframes.GraphFrame(nodes, edges)
 
+	# edges.write.parquet("thesis/edges3")
+	# nodes.write.parquet("thesis/vertices3")
+
 	# print("Num Vertices: ")
 	# print(g.vertices.count())
 	# print("Num (suitable) Edges: ")
 	# print(g.edges.count())
 
+	# For each vertex, find the average neighbour degree
+	# fist calculate the degree
 	print("TopDegrees: ")
 	vertices_out = g.degrees
 	vertices_out.sort(F.desc("degree")).show(50, False)
+
+	gx = graphframes.GraphFrame(vertices_out, edges)
+
+	msgToSrc = None
+	msgToDst = AM.src["degree"]
+	agg = gx.aggregateMessages(
+		F.avg(AM.msg).alias("average-nearest-neighbour-degree"),
+		sendToSrc=msgToSrc,
+		sendToDst=msgToDst)
+
+	vertices_out = vertices_out.join(agg, "id")
+	print("Average Nearest Neighbour Degree")
+	vertices_out.sort(F.asc("average-nearest-neighbour-degree")).show(1000, False)
 
 	print("PageRank: ")
 	pagerank = g.pageRank(resetProbability=0.15, maxIter=3)

@@ -60,10 +60,8 @@ sc = pyspark.SparkContext(conf=configuration)
 
 reader = sc.textFile("hdfs://ir-hadoop2/user/madis/microdata/2017/triples-microdata")
 
-# distinct 16:45:01 - 16:46:16
-# no distinct 16:48:46 - 16:50:49
 with_companies = reader.filter(contains_company_url).distinct().map(insert_company_triples)
-with_companies.coalesce(1).saveAsTextFile("thesis/companiy-triples")
+with_companies.saveAsTextFile("thesis/companiy-triples")
 
 
 # join companies and triples

@@ -97,13 +97,9 @@ if __name__ == "__main__":
 	with_companies = reader\
 		.map(insert_company_triples)\
 		.filter(lambda a: a is not None)\
-		.distinct()\
-		.collect()
+		.distinct()
 
-	for i in with_companies:
-		print i
-
-	# with_companies.saveAsTextFile(output_loc)
+	with_companies.saveAsTextFile(output_loc)
 
 	# join companies and triples
 	# combined = reader.union(with_companies)

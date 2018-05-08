@@ -7,7 +7,7 @@ Connects a triples to companies, companies are read from a csv file. Output is a
 
 ## bipartite-graphs.py
 
-Creates bipartite graphs from output of link-triples-to-orgs.py. Outputs two dataframes. First one contains company-product pairs where product is schema.org/Product/sameAs value or SKU value. Other dataframe is the same as above but filtered such that only those that have sameAS or SKU value are kept. Parameters in cluster: hdfs://ir-hadoop1/user/madis/microdata/2017/triples-microdata hdfs://ir-hadoop1/user/madis/thesis/outputs/company-triples thesis/output/bipartite-all thesis/output/bipartite-all-sku-only
+Creates bipartite graphs from output of link-triples-to-orgs.py. Outputs two dataframes. First one contains company-product pairs where product is schema.org/Product/sameAs value or SKU value. Other dataframe is the same as above but filtered such that only those that have sameAS or SKU value are kept. Parameters in cluster: microdata/2017/triples-microdata thesis/outputs/company-triples thesis/output/bipartite-all thesis/output/bipartite-all-sku-only
 
 
 ## calculate-network-metrics.py
