@@ -73,20 +73,24 @@ if __name__ == "__main__":
 	# fist calculate the degree
 	print("TopDegrees: ")
 	vertices_out = g.degrees
-	vertices_out.sort(F.desc("degree")).show(50, False)
+	# vertices_out.sort(F.desc("degree")).show(50, False)
 
 	gx = graphframes.GraphFrame(vertices_out, edges)
 
+	print("Nearest Neighbour Degree")
 	msgToSrc = None
 	msgToDst = AM.src["degree"]
-	agg = gx.aggregateMessages(
-		F.avg(AM.msg).alias("average-nearest-neighbour-degree"),
+	nnd = gx.aggregateMessages(
+		F.avg(AM.msg).alias("nearest-neighbour-degree"),
 		sendToSrc=msgToSrc,
 		sendToDst=msgToDst)
 
-	vertices_out = vertices_out.join(agg, "id")
-	print("Average Nearest Neighbour Degree")
-	vertices_out.sort(F.asc("average-nearest-neighbour-degree")).show(1000, False)
+	vertices_out = vertices_out.join(nnd, "id")
+
+	print("Average Nearest Neigbour Degree")
+	vertices_out = vertices_out \
+		.join(vertices_out.groupBy(vertices_out.degree).avg("nearest-neighbour-degree"), "degree") \
+		.select(F.col("id"), F.col("degree"), F.col("nearest-neighbour-degree"), F.col("avg(nearest-neighbour-degree)").alias("annd"))
 
 	print("PageRank: ")
 	pagerank = g.pageRank(resetProbability=0.15, maxIter=3)
@@ -101,7 +105,7 @@ if __name__ == "__main__":
 	# output the data
 	vertices_out.write.parquet(output_location)
 
-	g.edges.show(50, False)
-	g.vertices.show(50, False)
+	# g.edges.show(50, False)
+	# g.vertices.show(50, False)
 
 	spark.stop()

@@ -95,6 +95,7 @@ if __name__ == "__main__":
 
 	sc = pyspark.SparkContext()
 	sc.setLogLevel("ERROR")
+	print("cores " + str(sc._conf.get('spark.executor.instances')))
 
 	reader = sc.textFile(input_loc)
 

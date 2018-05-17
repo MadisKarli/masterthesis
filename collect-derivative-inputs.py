@@ -32,10 +32,10 @@ if __name__ == "__main__":
 	# generate values if we don't have 49 columns
 	# todo what should we do when new metric is added halfway through, create 0s before the time?
 
-	time_series_variables = ['degree', 'pagerank']
+	time_series_variables = ['degree', 'pagerank', 'nearest-neighbour-degree', 'annd']
 	# calculate how many extra variables we need to generate
 	variable_count = dir_df.shape[1] / len(time_series_variables)
-	needed = 49 - variable_count
+	needed = 52 - variable_count
 
 	# generate an output file for each column name as derivatives does not support multiple time series
 	row_names = dir_df.index
@@ -48,7 +48,7 @@ if __name__ == "__main__":
 		if generate_data_bool:
 			colnames = [ts + str('{:02d}'.format(variable_count + 1 + x)) for x in range(needed)]
 
-			generated_values = np.random.rand(len(row_names), len(colnames))
+			generated_values = np.random.randint(0, 100, (len(row_names), len(colnames)))
 
 			generated_df = pd.DataFrame(columns=colnames, index=row_names, data=generated_values)
 			combined_df = pd.concat([ts_only, generated_df], axis=1)
