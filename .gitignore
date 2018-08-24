@@ -1,0 +1,11 @@
+
+metastore_db/
+
+tmp/
+
+.idea/
+
+*.pyc
+
+derby.log
+

@@ -1,4 +1,5 @@
 import pyspark
+from pyspark.sql.types import Row
 import sys
 import time
 
@@ -19,14 +20,11 @@ def populate_companies(file_loc):
 	return db
 
 
-def create_estonian_company_triples(mined_from, company_code):
-	company_node_id = "_:company" + company_code
-
-	a = "<" + mined_from + "> <http://www.w3.org/1999/xhtml/microdata#media> " + company_node_id + " .\n"
-	b = company_node_id + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://graph.ir.ee/media> .\n"
-	c = company_node_id + " <http://graph.ir.ee/media/usedBy> \"" + company_code + "\" ."
-
-	return a + b + c
+def split_row(row):
+	x = row
+	row = row[:-2].split(" ", 2)
+	domain = None if (x.startswith("_:node") or x.startswith(":node")) else x.replace("http://", "").replace("https://", "").replace("www.", "").split("> ")[0][1:].split("/")[0]
+	return Row(DOMAIN=domain, s=row[0], p=row[1], o=row[2])
 
 
 def insert_company_triples(row):
@@ -58,13 +56,18 @@ def insert_company_triples(row):
 		return None
 
 	# match with database information
+	# we do it ths way as we also need partial matches
+	# if we go with full matches (lose some information), then there are faster ways
 	for j in company_database:
 		if j in mined_from_url.lower():
 			# check if domains match, from server.domain.com/path we only use domain.com
 			domain2 = ".".join(j.replace("www.", "").split("/")[0].split(".")[-2:])
 
 			if domain1 == domain2:
-				company_id = company_database[j]
+				if cluster:
+					company_id = company_database[j][0]
+				else:
+					company_id = company_database[j]
 				# return company_id + " " + j
 				return "<" + mined_from_url_clean + "> " \
 													"<http://graph.ir.ee/media/usedBy> " \
@@ -91,10 +94,29 @@ if __name__ == "__main__":
 
 	start = time.time()
 
-	company_database = populate_companies(company_csv_list_loc)
+	cluster = False
 
-	sc = pyspark.SparkContext()
+	s_conf = pyspark.SparkConf()
+	s_conf.set("spark.executor.instances", "60")
+	s_conf.set("spark.dynamicAllocation.enabled", "false")
+
+	sc = pyspark.SparkContext(conf=s_conf)
 	sc.setLogLevel("ERROR")
+	sqlContext = pyspark.SQLContext(sc)
+
+	if cluster:
+		array = ["Not Disclosed - Visit www.internet.ee for webbased WHOIS"]
+
+		company_data = sqlContext.read.format("org.apache.phoenix.spark").option("table", 'IR.STG_DOMAIN').option("fetchSize",
+																											"10000").option(
+			"numPartitions", "5000").option("zkUrl", "ir-hadoop1,ir-hadoop2,ir-hadoop3:2181").load()
+
+		company_df = company_data.select(company_data.DOMAIN, company_data.REG_CODE).filter(
+			company_data.REG_CODE.isin(*array) == False).distinct()
+
+		company_database = company_df.toPandas().set_index('DOMAIN').T.to_dict('list')
+	else:
+		company_database = populate_companies(company_csv_list_loc)
 
 	reader = sc.textFile(input_loc)
 
@@ -104,13 +126,6 @@ if __name__ == "__main__":
 		.distinct()
 
 	with_companies.saveAsTextFile(output_loc)
-
-	# join companies and triples
-	# combined = reader.union(with_companies)
-	# combined.saveAsTextFile("tmp/merged-tpiletee01")
-
-	print("-----------------------------------------------------------------------")
-	print("cores" + str(sc._jsc.sc().getExecutorMemoryStatus().keySet().size()))
 
 	sc.stop()
 
