@@ -114,11 +114,8 @@ if __name__ == "__main__":
 
 	sparkconf = SparkConf()
 	sparkconf.setAppName("Build bipartite graphs")
-
 	spark = SparkContext(conf=sparkconf)
-
-	#spark.setLogLevel('ERROR')
-
+	spark.setLogLevel('ERROR')
 	sqlContext = SQLContext(spark)
 
 	triples = spark.textFile(microdata_triples_location)
